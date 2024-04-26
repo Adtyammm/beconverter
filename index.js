@@ -3,7 +3,7 @@ const app = express();
 const cors = require("cors");
 // const convertAudio = require("./convertaudio");
 const convertImage = require("./convertimage");
-// const mergeAudio = require("./mergeaudio");
+const mergeAudio = require("./mergeaudio");
 
 const dbConfig = require("./mongoDB");
 
@@ -18,9 +18,9 @@ app.get("/", async (req, res, next) => {
   });
 });
 
-// app.use("/audio", convertAudio);
-app.use("/", convertImage);
-// app.use("/merge", mergeAudio);
+// app.use("/", convertAudio);
+app.use("/img", convertImage);
+app.use("/merge", mergeAudio);
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log("Server is running on port", port));
