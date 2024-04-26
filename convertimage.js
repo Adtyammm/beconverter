@@ -34,7 +34,7 @@ router.post("/img/upload", upload.single("image"), async (req, res) => {
     console.log("Data gambar yang akan disimpan:", newImage);
 
     res.json({
-      processedImageUrl: `/api/download/${newImage._id}`,
+      processedImageUrl: `https://server-process.vercel.app/api/download/${newImage._id}`,
       imageDetails: {
         processedImageSize: newImage.size,
         processedImageWidth: newImage.width,
