@@ -1,0 +1,30 @@
+{
+  "name": "praksismul",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "build": "echo \"No build specified\" && exit 1",
+    "test": "echo \"No test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google-cloud/speech": "^6.5.0",
+    "axios": "^1.2.1",
+    "body-parser": "^1.20.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "ffmpeg": "^0.0.4",
+    "fluent-ffmpeg": "^2.1.2",
+    "moment": "^2.29.4",
+    "mongoose": "^6.8.1",
+    "multer": "^1.4.5-lts.1",
+    "multer-gridfs-storage": "^5.0.2",
+    "nodemon": "^3.1.0",
+    "react-file-base64": "^1.0.3",
+    "sharp": "^0.32.1",
+    "uuid": "^9.0.0",
+    "uuidv4": "^6.2.13"
+  }
+}
