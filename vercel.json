@@ -7,7 +7,9 @@
     }
   ],
   "routes": [
-    { "src": "/index/(.*)", "dest": "index.js" },
+    { "src": "/audio/(.*)", "dest": "index.js" },
+    { "src": "/img/(.*)", "dest": "index.js" },
+    { "src": "/merge/(.*)", "dest": "index.js" },
     { "src": "/(.*)", "dest": "index.js" }
   ]
 }
