@@ -5,6 +5,7 @@ const fs = require("fs").promises;
 const AudioDB = require("./model/dbaudio");
 const MergeDB = require("./model/dbmerge");
 const DualAudioDB = require("./model/uploadaudio");
+const TempAudio = require("./model/tempaudio");
 
 const router = express();
 
@@ -68,15 +69,30 @@ router.post("/merge", async (req, res) => {
     // Baca file hasil penggabungan
     const mergedAudioBuffer = await fs.readFile(outputPath);
 
-    // Kirim audio hasil penggabungan sebagai respons
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.send(mergedAudioBuffer);
-    console.log("berhasil mengambil data", mergedAudioBuffer);
+    const tempAudio1 = new TempAudio({
+      fileName: dualAudio.audio1.fileName,
+      audioData: await fs.readFile(tempAudio1Path),
+    });
+    await tempAudio1.save();
 
-    // Hapus file sementara
+    const tempAudio2 = new TempAudio({
+      fileName: dualAudio.audio2.fileName,
+      audioData: await fs.readFile(tempAudio2Path),
+    });
+    await tempAudio2.save();
+
+    const mergedAudio = new AudioDB({
+      fileName: "merged_audio.mp3",
+      audioData: mergedAudioBuffer,
+    });
+    await mergedAudio.save();
+
     await fs.unlink(tempAudio1Path);
     await fs.unlink(tempAudio2Path);
     await fs.unlink(outputPath);
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.send(mergedAudioBuffer);
   } catch (error) {
     console.error("Error:", error);
     res.status(500).send("Error merging audio");
