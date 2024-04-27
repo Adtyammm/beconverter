@@ -10,6 +10,14 @@ const audioSchema = new mongoose.Schema(
       type: Buffer,
       // required: true,
     },
+    audio1: {
+      type: Buffer,
+      // required: true,
+    },
+    audio2: {
+      type: Buffer,
+      // required: true,
+    },
     filePath: {
       type: String,
     },

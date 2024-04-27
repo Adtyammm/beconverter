@@ -27,7 +27,6 @@ router.post("/merge", upload.array("audioFiles"), async (req, res) => {
     });
 
     const outputPath = "merged.mp3";
-
     await new Promise((resolve, reject) => {
       command
         .on("end", () => {

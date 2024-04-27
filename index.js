@@ -19,7 +19,7 @@ app.get("/", async (req, res, next) => {
 });
 
 // app.use("/", convertAudio);
-app.use("/img", convertImage);
+app.use("/images", convertImage);
 app.use("/merge", mergeAudio);
 
 const port = process.env.PORT || 3000;
