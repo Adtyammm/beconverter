@@ -6,6 +6,10 @@ const AudioDB = require("./model/dbaudio");
 const MergeDB = require("./model/dbmerge");
 const DualAudioDB = require("./model/uploadaudio");
 const TempAudio = require("./model/tempaudio");
+const { Readable } = require("stream");
+
+const { PassThrough } = require("stream");
+
 
 const router = express();
 
@@ -39,65 +43,56 @@ router.post("/upload", upload.array("audioFiles"), async (req, res) => {
 
 router.post("/merge", async (req, res) => {
   try {
-    // Ambil data DualAudioDB berdasarkan _id
     const dualAudio = await DualAudioDB.findById(req.body.id);
-
     if (!dualAudio) {
+      console.log("Dual audio not found");
       return res.status(404).send("Dual audio not found");
     }
+    console.log("Dual audio found:");
 
-    // Simpan data audio dari DualAudioDB ke dalam file sementara
-    const tempAudio1Path = `temp_${Date.now()}_${dualAudio.audio1.fileName}`;
-    const tempAudio2Path = `temp_${Date.now()}_${dualAudio.audio2.fileName}`;
+    const buffer1 = dualAudio.audio1.audioData;
+    const buffer2 = dualAudio.audio2.audioData;
 
-    await fs.writeFile(tempAudio1Path, dualAudio.audio1.audioData);
-    await fs.writeFile(tempAudio2Path, dualAudio.audio2.audioData);
+    const mergedBuffer = Buffer.concat([buffer1, buffer2]);
 
-    // Proses penggabungan audio menggunakan ffmpeg
+    const audioStream = new PassThrough();
+    audioStream.end(mergedBuffer);
+
     const outputPath = "merged_audio.mp3";
-    await new Promise((resolve, reject) => {
-      ffmpeg()
-        .input(tempAudio1Path)
-        .input(tempAudio2Path)
-        .complexFilter("[0:a][1:a]amerge=inputs=2")
-        .output(outputPath)
-        .on("end", resolve)
-        .on("error", reject)
-        .run();
-    });
 
-    // Baca file hasil penggabungan
-    const mergedAudioBuffer = await fs.readFile(outputPath);
+    ffmpeg()
+      .input(audioStream)
+      .output(outputPath)
+      .on("start", (commandLine) => {
+        console.log("ffmpeg command:", commandLine);
+      })
+      .on("progress", (progress) => {
+        console.log("ffmpeg progress:", progress);
+      })
+      .on("end", () => {
+        console.log("Audio merging completed");
+        res.download(outputPath, "merged_audio.mp3", (err) => {
+          if (err) {
+            console.error("Error sending merged audio:", err);
+            res.status(500).send("Error sending merged audio");
+          } else {
+            console.log("Merged audio sent successfully");
+          }
+        });
+      })
 
-    const tempAudio1 = new TempAudio({
-      fileName: dualAudio.audio1.fileName,
-      audioData: await fs.readFile(tempAudio1Path),
-    });
-    await tempAudio1.save();
-
-    const tempAudio2 = new TempAudio({
-      fileName: dualAudio.audio2.fileName,
-      audioData: await fs.readFile(tempAudio2Path),
-    });
-    await tempAudio2.save();
-
-    const mergedAudio = new AudioDB({
-      fileName: "merged_audio.mp3",
-      audioData: mergedAudioBuffer,
-    });
-    await mergedAudio.save();
-
-    await fs.unlink(tempAudio1Path);
-    await fs.unlink(tempAudio2Path);
-    await fs.unlink(outputPath);
-
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.send(mergedAudioBuffer);
+      .on("error", (error) => {
+        console.error("Error merging audio:", error);
+        res.status(500).send("Error merging audio");
+      })
+      .run();
   } catch (error) {
     console.error("Error:", error);
     res.status(500).send("Error merging audio");
   }
 });
+
+
 
 
 
