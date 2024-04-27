@@ -4,69 +4,86 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs").promises;
 const AudioDB = require("./model/dbaudio");
 const MergeDB = require("./model/dbmerge");
+const DualAudioDB = require("./model/uploadaudio");
 
 const router = express();
 
 const upload = multer();
 
-router.post("/merge", upload.array("audioFiles"), async (req, res) => {
+router.post("/upload", upload.array("audioFiles"), async (req, res) => {
   try {
     const audioFiles = req.files;
     console.log("Uploading files:", audioFiles);
 
-    const fileNames = [];
-    audioFiles.forEach((file) => {
-      console.log("Processing file:", file.originalname);
-      const tempFileName = `temp_${Date.now()}_${file.originalname}`;
-      fileNames.push(tempFileName);
-      fs.writeFile(tempFileName, file.buffer);
+    const audio1 = new DualAudioDB({
+      audio1: {
+        fileName: audioFiles[0].originalname,
+        audioData: audioFiles[0].buffer,
+      },
+      audio2: {
+        fileName: audioFiles[1].originalname,
+        audioData: audioFiles[1].buffer,
+      },
     });
 
-    const command = ffmpeg();
-    fileNames.forEach((fileName) => {
-      command.input(fileName);
-    });
+    await audio1.save();
+    console.log("Uploaded audio files saved to MongoDB");
 
-    const outputPath = "merged.mp3";
-    await new Promise((resolve, reject) => {
-      command
-        .on("end", () => {
-          console.log("Merge process completed");
-
-          fs.readFile(outputPath)
-            .then(async (mergedAudioBuffer) => {
-              console.log("Audio merged successfully");
-
-              const mergedAudio = new AudioDB({
-                fileName: "audio-gab.mp3",
-                audioData: mergedAudioBuffer,
-              });
-              await mergedAudio.save();
-              console.log("Audio saved to MongoDB:", mergedAudio.fileName);
-
-              fileNames.forEach((fileName) => {
-                fs.unlink(fileName);
-              });
-
-              res.setHeader("Content-Type", "audio/mpeg");
-              res.send(mergedAudioBuffer);
-            })
-            .catch((err) => {
-              console.error("Error reading merged audio file:", err);
-              reject(err);
-            });
-        })
-        .on("error", (err) => {
-          console.error("Error during merge:", err);
-          reject(err);
-        })
-        .mergeToFile(outputPath);
-    });
+    res.status(200).json(audio1);
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).send("Error merging and saving audio");
+    res.status(500).send("Error uploading audio");
   }
 });
+
+router.post("/merge", async (req, res) => {
+  try {
+    // Ambil data DualAudioDB berdasarkan _id
+    const dualAudio = await DualAudioDB.findById(req.body.id);
+
+    if (!dualAudio) {
+      return res.status(404).send("Dual audio not found");
+    }
+
+    // Simpan data audio dari DualAudioDB ke dalam file sementara
+    const tempAudio1Path = `temp_${Date.now()}_${dualAudio.audio1.fileName}`;
+    const tempAudio2Path = `temp_${Date.now()}_${dualAudio.audio2.fileName}`;
+
+    await fs.writeFile(tempAudio1Path, dualAudio.audio1.audioData);
+    await fs.writeFile(tempAudio2Path, dualAudio.audio2.audioData);
+
+    // Proses penggabungan audio menggunakan ffmpeg
+    const outputPath = "merged_audio.mp3";
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(tempAudio1Path)
+        .input(tempAudio2Path)
+        .complexFilter("[0:a][1:a]amerge=inputs=2")
+        .output(outputPath)
+        .on("end", resolve)
+        .on("error", reject)
+        .run();
+    });
+
+    // Baca file hasil penggabungan
+    const mergedAudioBuffer = await fs.readFile(outputPath);
+
+    // Kirim audio hasil penggabungan sebagai respons
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.send(mergedAudioBuffer);
+    console.log("berhasil mengambil data", mergedAudioBuffer);
+
+    // Hapus file sementara
+    await fs.unlink(tempAudio1Path);
+    await fs.unlink(tempAudio2Path);
+    await fs.unlink(outputPath);
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).send("Error merging audio");
+  }
+});
+
+
 
 router.post(
   "/mergewithbacksound",
@@ -122,7 +139,6 @@ router.post(
     }
   }
 );
-
 
 router.get("/download/:id", async (req, res) => {
   try {
@@ -203,7 +219,6 @@ router.get("/audio/:id", async (req, res) => {
   }
 });
 
-
 router.get("/getmerge", async (req, res) => {
   try {
     const mergedAudios = await AudioDB.find();
@@ -223,6 +238,5 @@ router.get("/getmergewithbacksound", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 module.exports = router;
