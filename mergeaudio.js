@@ -3,6 +3,7 @@ const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs").promises;
 const AudioDB = require("./model/dbaudio");
+const MergeDB = require("./model/dbmerge");
 
 const router = express();
 
@@ -75,51 +76,40 @@ router.post(
       const audioFiles = req.files;
       console.log("Uploading files:", audioFiles);
 
-      const outputPath = "merged-with-backsound.mp3";
+      const tempFilePaths = [];
+      for (const file of audioFiles) {
+        console.log("Processing file:", file.originalname);
+        const tempFileName = `temp_${Date.now()}_${file.originalname}`;
+        tempFilePaths.push(tempFileName);
+        await fs.writeFile(tempFileName, file.buffer);
+      }
+
+      const outputPath = "audio-back.mp3";
       const command = ffmpeg();
 
-      command
-        .input(audioFiles[0].path)
-        .input(audioFiles[1].path)
-        .complexFilter([
-          "[0:a]volume=1[a1];[1:a]volume=0.5[a2];[a1][a2]amix=inputs=2:duration=longest",
-        ]);
+      for (const filePath of tempFilePaths) {
+        command.input(filePath);
+      }
 
       command
+        .complexFilter([
+          "[0:a]volume=1[a1];[1:a]volume=0.5[a2];[a1][a2]amix=inputs=2:duration=longest",
+        ])
         .on("end", async () => {
           console.log("Audio merged with backsound successfully");
 
-          const mergedAudio = new AudioDB({
+          const mergedAudio = new MergeDB({
             fileName: "merged-audio-with-backsound.mp3",
-            filePath: outputPath,
+            audioData: await fs.readFile(outputPath),
           });
           await mergedAudio.save();
 
-          res.download(outputPath, "merged-audio-with-backsound.mp3", (err) => {
-            if (err) {
-              console.error(
-                "Error downloading merged audio with backsound:",
-                err
-              );
-            }
+          for (const filePath of tempFilePaths) {
+            await fs.unlink(filePath);
+          }
 
-            audioFiles.forEach((file) => {
-              fs.unlink(file.path, (err) => {
-                if (err) {
-                  console.error("Error deleting temporary file:", err);
-                }
-              });
-            });
-
-            fs.unlink(outputPath, (err) => {
-              if (err) {
-                console.error(
-                  "Error deleting merged audio with backsound file:",
-                  err
-                );
-              }
-            });
-          });
+          res.setHeader("Content-Type", "audio/mpeg");
+          res.send(await fs.readFile(outputPath));
         })
         .on("error", (error) => {
           console.error("Error merging audio with backsound:", error);
@@ -132,6 +122,7 @@ router.post(
     }
   }
 );
+
 
 router.get("/download/:id", async (req, res) => {
   try {
@@ -179,6 +170,24 @@ router.get("/latest-audio", async (req, res) => {
   }
 });
 
+router.get("/latest-mergewithbacksound", async (req, res) => {
+  try {
+    const latestAudio = await MergeDB.findOne().sort({ createdAt: -1 });
+
+    if (!latestAudio) {
+      console.error("Tidak ada audio yang tersedia.");
+      return res.status(404).send("Tidak ada audio yang tersedia.");
+    }
+
+    res.set("Content-Type", "audio/mpeg");
+    res.send(latestAudio.audioData);
+    console.log("succes", latestAudio.fileName);
+  } catch (error) {
+    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+  }
+});
+
 router.get("/audio/:id", async (req, res) => {
   try {
     const audio = await AudioDB.findById(req.params.id);
@@ -193,5 +202,27 @@ router.get("/audio/:id", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+router.get("/getmerge", async (req, res) => {
+  try {
+    const mergedAudios = await AudioDB.find();
+    res.json(mergedAudios);
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.get("/getmergewithbacksound", async (req, res) => {
+  try {
+    const mergedAudios = await MergeDB.find();
+    res.json(mergedAudios);
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 module.exports = router;
