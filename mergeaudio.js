@@ -2,10 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs").promises;
-const AudioDB = require("./model/dbaudio");
-const MergeDB = require("./model/dbmerge");
 const DualAudioDB = require("./model/uploadaudio");
-const TempAudio = require("./model/tempaudio");
 
 const router = express();
 
@@ -67,11 +64,12 @@ router.post("/merge", async (req, res) => {
 
         const mergedAudioBuffer = await fs.readFile(outputPath);
 
-        const mergedAudio = new AudioDB({
+        dualAudio.mergedData.push({
           fileName: "merged_audio.mp3",
           audioData: mergedAudioBuffer,
         });
-        await mergedAudio.save();
+
+        await dualAudio.save();
 
         await fs.unlink(tempAudio1Path);
         await fs.unlink(tempAudio2Path);
@@ -121,11 +119,12 @@ router.post("/mergewithbacksound", async (req, res) => {
 
         const mergedAudioBuffer = await fs.readFile(outputPath);
 
-        const mergedAudio = new MergeDB({
+        dualAudio.mergedDataBacksound.push({
           fileName: "merged-audio-with-backsound.mp3",
           audioData: mergedAudioBuffer,
         });
-        await mergedAudio.save();
+
+        await dualAudio.save();
 
         await fs.unlink(tempAudio1Path);
         await fs.unlink(tempAudio2Path);
@@ -142,29 +141,6 @@ router.post("/mergewithbacksound", async (req, res) => {
   } catch (error) {
     console.error("Error:", error);
     return res.status(500).send("Error merging audio with backsound");
-  }
-});
-
-router.get("/get-audio", async (req, res) => {
-  try {
-    const latestAudios = await AudioDB.find().sort({ createdAt: -1 });
-
-    if (latestAudios.length === 0) {
-      console.error("Tidak ada audio yang tersedia.");
-      return res.status(404).send("Tidak ada audio yang tersedia.");
-    }
-
-    const audioDataArray = latestAudios.map((audio) => ({
-      id: audio.id,
-      audioData: audio.audioData.toString("base64"),
-    }));
-
-    res.set("Content-Type", "application/json");
-    res.json(audioDataArray);
-    console.log("Success, total latest audio:", latestAudios.length);
-  } catch (error) {
-    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
-    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
   }
 });
 
@@ -187,6 +163,14 @@ router.get("/getdual", async (req, res) => {
         fileName: audio.audio2.fileName,
         audioData: audio.audio2.audioData.toString("base64"),
       },
+      mergedData: audio.mergedData.map((mergedItem) => ({
+        fileName: mergedItem.fileName,
+        audioData: mergedItem.audioData.toString("base64"),
+      })),
+      mergedDataBacksound: audio.mergedDataBacksound.map((mergedBacksound) => ({
+        fileName: mergedBacksound.fileName,
+        audioData: mergedBacksound.audioData.toString("base64"),
+      })),
       createdAt: audio.createdAt,
       updatedAt: audio.updatedAt,
       __v: audio.__v,
@@ -201,22 +185,6 @@ router.get("/getdual", async (req, res) => {
   }
 });
 
-// router.get("/latest-audio", async (req, res) => {
-//   try {
-//     const latestAudio = await AudioDB.findOne().sort({ createdAt: -1 });
 
-//     if (!latestAudio) {
-//       console.error("Tidak ada audio yang tersedia.");
-//       return res.status(404).send("Tidak ada audio yang tersedia.");
-//     }
-
-//     res.set("Content-Type", "audio/mpeg");
-//     res.send(latestAudio.audioData);
-//     console.log("succes", latestAudio.fileName);
-//   } catch (error) {
-//     console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
-//     res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
-//   }
-// });
 
 module.exports = router;

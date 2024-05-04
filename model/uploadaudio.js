@@ -22,6 +22,30 @@ const dualAudioSchema = new mongoose.Schema(
         required: true,
       },
     },
+    mergedData: [
+      {
+        fileName: {
+          type: String,
+          required: true,
+        },
+        audioData: {
+          type: Buffer,
+          required: true,
+        },
+      },
+    ],
+    mergedDataBacksound: [
+      {
+        fileName: {
+          type: String,
+          required: true,
+        },
+        audioData: {
+          type: Buffer,
+          required: true,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

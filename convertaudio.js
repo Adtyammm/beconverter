@@ -1,90 +1,131 @@
 const express = require("express");
 const multer = require("multer");
-const path = require("path");
-const ffmpeg = require("fluent-ffmpeg");
+const UploadedAudio = require("./model/convert");
 const { v4: uuidv4 } = require("uuid");
-const fs = require("fs");
-
 const router = express.Router();
+const ffmpeg = require("fluent-ffmpeg");
+const fs = require("fs");
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
-router.use("/uploads_convert_audio", express.static("uploads_convert_audio"));
+router.post("/upload", upload.single("audio"), async (req, res) => {
+  try {
+    if (req.file) {
+      const { originalname, mimetype, size, filename } = req.file;
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads_convert_audio/");
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
-    );
-  },
-});
-
-const upload = multer({ dest: "uploads_convert_audio/" });
-
-
-router.post("/upload", upload.single("audio"), (req, res) => {
-  if (req.file) {
-    const { originalname, mimetype, size } = req.file;
-    res.json({
-      message: "File uploaded successfully",
-      filename: req.file.filename,
-      originalname,
-      mimetype,
-      size,
-    });
-  } else {
-    res.status(400).json({ message: "No file uploaded" });
-  }
-});
-
-
-router.post("/convert", upload.single("audio"), (req, res) => {
-  if (req.file) {
-    const { format } = req.body;
-    const filePath = req.file.path;
-    const convertedFileName = uuidv4() + "." + format;
-
-    ffmpeg(filePath)
-      .toFormat(format)
-      .save("uploads_convert_audio/" + convertedFileName)
-      .on("end", () => {
-        const convertedFilePath = "uploads_convert_audio/" + convertedFileName;
-        const convertedFileSize = fs.statSync(convertedFilePath).size;
-
-        const convertedFileDetails = {
-          name: convertedFileName,
-          type: format,
-          size: convertedFileSize,
-        };
-
-        res.json({
-          message: "File converted successfully",
-          convertedFileDetails,
-        });
-      })
-      .on("error", (err) => {
-        console.error("Error converting file:", err);
-        res.status(500).json({ message: "Error converting file" });
+      const uploadedAudio = new UploadedAudio({
+        originalname,
+        mimetype,
+        size,
+        filename,
+        audioData: req.file.buffer,
       });
-  } else {
-    res.status(400).json({ message: "No file uploaded" });
+
+      await uploadedAudio.save();
+
+      res.json({
+        message: "File uploaded successfully",
+        originalname,
+        mimetype,
+        size,
+      });
+    } else {
+      res.status(400).json({ message: "No file uploaded" });
+    }
+  } catch (error) {
+    console.error("Error uploading file:", error);
+    res.status(500).json({ message: "Error uploading file" });
   }
 });
 
+router.get("/getData", async (req, res) => {
+  try {
+    const latestAudios = await UploadedAudio.find().sort({ createdAt: -1 });
 
-router.get("/download/:filename", (req, res) => {
-  const { filename } = req.params;
-  const filePath = path.join(__dirname, "uploads_convert_audio", filename);
-
-  res.download(filePath, (err) => {
-    if (err) {
-      console.error("Error downloading file:", err);
-      res.status(500).json({ message: "Error downloading file" });
+    if (latestAudios.length === 0) {
+      console.error("Tidak ada audio yang tersedia.");
+      return res.status(404).send("Tidak ada audio yang tersedia.");
     }
-  });
+
+    const audioDataArray = latestAudios.map((audio) => ({
+      id: audio._id,
+      originalname: audio.originalname,
+      mimetype: audio.mimetype,
+      size: audio.size,
+      filename: audio.filename,
+      createdAt: audio.createdAt,
+    }));
+
+    res.json(audioDataArray);
+    console.log("Success, total latest audio:", latestAudios.length);
+  } catch (error) {
+    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+  }
+});
+
+router.get("/getdual", async (req, res) => {
+  try {
+    const latestAudios = await UploadedAudio.find().sort({ createdAt: -1 });
+
+    if (latestAudios.length === 0) {
+      console.error("Tidak ada audio yang tersedia.");
+      return res.status(404).send("Tidak ada audio yang tersedia.");
+    }
+
+    const audioDataArray = latestAudios.map((audio) => ({
+      _id: audio._id,
+      originalname: audio.originalname,
+      mimetype: audio.mimetype,
+      size: audio.size,
+      audioData: audio.audioData.toString("base64"),
+      convertedFiles: audio.convertedFiles,
+      createdAt: audio.createdAt,
+      updatedAt: audio.updatedAt,
+      __v: audio.__v,
+    }));
+
+    res.set("Content-Type", "application/json");
+    res.json(audioDataArray);
+    console.log("Success, total latest audio:", latestAudios.length);
+  } catch (error) {
+    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+  }
+});
+
+router.get("/getLatestAudio", async (req, res) => {
+  try {
+    const latestAudio = await UploadedAudio.findOne().sort({ createdAt: -1 });
+
+    if (!latestAudio) {
+      console.error("Tidak ada audio yang tersedia.");
+      return res.status(404).send("Tidak ada audio yang tersedia.");
+    }
+
+    res.set("Content-Type", "audio/mpeg");
+    res.send(latestAudio.audioData);
+    console.log("Success", latestAudio.originalname);
+  } catch (error) {
+    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+  }
+});
+
+router.get("/getLastAudioId", async (req, res) => {
+  try {
+    const latestAudio = await UploadedAudio.findOne().sort({ createdAt: -1 });
+
+    if (!latestAudio) {
+      console.error("Tidak ada audio yang tersedia.");
+      return res.status(404).send("Tidak ada audio yang tersedia.");
+    }
+
+    res.json({ id: latestAudio._id });
+  } catch (error) {
+    console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+    res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+  }
 });
 
 module.exports = router;

@@ -18,7 +18,7 @@ app.get("/", async (req, res, next) => {
   });
 });
 
-app.use("/", convertAudio);
+app.use("/convert", convertAudio);
 app.use("/images", convertImage);
 app.use("/merge", mergeAudio);
 
