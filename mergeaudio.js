@@ -6,10 +6,6 @@ const AudioDB = require("./model/dbaudio");
 const MergeDB = require("./model/dbmerge");
 const DualAudioDB = require("./model/uploadaudio");
 const TempAudio = require("./model/tempaudio");
-const { Readable } = require("stream");
-
-const { PassThrough } = require("stream");
-
 
 const router = express();
 
@@ -44,210 +40,183 @@ router.post("/upload", upload.array("audioFiles"), async (req, res) => {
 router.post("/merge", async (req, res) => {
   try {
     const dualAudio = await DualAudioDB.findById(req.body.id);
+
     if (!dualAudio) {
-      console.log("Dual audio not found");
       return res.status(404).send("Dual audio not found");
     }
-    console.log("Dual audio found:");
 
-    const buffer1 = dualAudio.audio1.audioData;
-    const buffer2 = dualAudio.audio2.audioData;
+    const tempAudio1Path = `temp_${Date.now()}_${dualAudio.audio1.fileName}`;
+    const tempAudio2Path = `temp_${Date.now()}_${dualAudio.audio2.fileName}`;
 
-    const mergedBuffer = Buffer.concat([buffer1, buffer2]);
-
-    const audioStream = new PassThrough();
-    audioStream.end(mergedBuffer);
+    await fs.writeFile(tempAudio1Path, dualAudio.audio1.audioData);
+    await fs.writeFile(tempAudio2Path, dualAudio.audio2.audioData);
 
     const outputPath = "merged_audio.mp3";
 
-    ffmpeg()
-      .input(audioStream)
-      .output(outputPath)
-      .on("start", (commandLine) => {
-        console.log("ffmpeg command:", commandLine);
-      })
-      .on("progress", (progress) => {
-        console.log("ffmpeg progress:", progress);
-      })
-      .on("end", () => {
-        console.log("Audio merging completed");
-        res.download(outputPath, "merged_audio.mp3", (err) => {
-          if (err) {
-            console.error("Error sending merged audio:", err);
-            res.status(500).send("Error sending merged audio");
-          } else {
-            console.log("Merged audio sent successfully");
-          }
-        });
-      })
+    const command = ffmpeg();
 
+    command
+      .input(tempAudio1Path)
+      .input(tempAudio2Path)
+      .outputOptions("-y")
+      .complexFilter("[0:a][1:a]concat=n=2:v=0:a=1")
+      .output(outputPath)
+
+      .on("end", async () => {
+        console.log("Audio merged successfully");
+
+        const mergedAudioBuffer = await fs.readFile(outputPath);
+
+        const mergedAudio = new AudioDB({
+          fileName: "merged_audio.mp3",
+          audioData: mergedAudioBuffer,
+        });
+        await mergedAudio.save();
+
+        await fs.unlink(tempAudio1Path);
+        await fs.unlink(tempAudio2Path);
+        await fs.unlink(outputPath);
+
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.send(mergedAudioBuffer);
+      })
       .on("error", (error) => {
         console.error("Error merging audio:", error);
-        res.status(500).send("Error merging audio");
+        return res.status(500).send("Error merging audio");
       })
       .run();
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).send("Error merging audio");
+    return res.status(500).send("Error merging audio");
   }
 });
 
-
-
-
-
-router.post(
-  "/mergewithbacksound",
-  upload.array("audioFiles"),
-  async (req, res) => {
-    try {
-      const audioFiles = req.files;
-      console.log("Uploading files:", audioFiles);
-
-      const tempFilePaths = [];
-      for (const file of audioFiles) {
-        console.log("Processing file:", file.originalname);
-        const tempFileName = `temp_${Date.now()}_${file.originalname}`;
-        tempFilePaths.push(tempFileName);
-        await fs.writeFile(tempFileName, file.buffer);
-      }
-
-      const outputPath = "audio-back.mp3";
-      const command = ffmpeg();
-
-      for (const filePath of tempFilePaths) {
-        command.input(filePath);
-      }
-
-      command
-        .complexFilter([
-          "[0:a]volume=1[a1];[1:a]volume=0.5[a2];[a1][a2]amix=inputs=2:duration=longest",
-        ])
-        .on("end", async () => {
-          console.log("Audio merged with backsound successfully");
-
-          const mergedAudio = new MergeDB({
-            fileName: "merged-audio-with-backsound.mp3",
-            audioData: await fs.readFile(outputPath),
-          });
-          await mergedAudio.save();
-
-          for (const filePath of tempFilePaths) {
-            await fs.unlink(filePath);
-          }
-
-          res.setHeader("Content-Type", "audio/mpeg");
-          res.send(await fs.readFile(outputPath));
-        })
-        .on("error", (error) => {
-          console.error("Error merging audio with backsound:", error);
-          return res.status(500).send("Error merging audio with backsound");
-        })
-        .save(outputPath);
-    } catch (error) {
-      console.error("Error:", error);
-      return res.status(500).send("Error merging audio with backsound");
-    }
-  }
-);
-
-router.get("/download/:id", async (req, res) => {
+router.post("/mergewithbacksound", async (req, res) => {
   try {
-    const audio = await AudioDB.findById(req.params.id);
-    if (!audio) {
-      return res.status(404).json({ error: "Audio not found" });
+    const dualAudioId = req.body.id;
+    const dualAudio = await DualAudioDB.findById(dualAudioId);
+
+    if (!dualAudio) {
+      return res.status(404).send("Dual audio not found");
     }
 
-    const filePath = audio.filePath;
+    const tempAudio1Path = `temp_${Date.now()}_${dualAudio.audio1.fileName}`;
+    const tempAudio2Path = `temp_${Date.now()}_${dualAudio.audio2.fileName}`;
 
-    fs.readFile(filePath, (err, data) => {
-      if (err) {
-        console.error("Error reading file:", err);
-        return res.status(500).json({ error: "Internal server error" });
-      }
+    await fs.writeFile(tempAudio1Path, dualAudio.audio1.audioData);
+    await fs.writeFile(tempAudio2Path, dualAudio.audio2.audioData);
 
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=${audio.fileName}`
-      );
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.send(data);
-    });
+    const outputPath = "audio-back.mp3";
+    const command = ffmpeg();
+
+    command
+      .input(tempAudio1Path)
+      .input(tempAudio2Path)
+      .complexFilter(
+        "[0:a]volume=1[a1];[1:a]volume=0.5[a2];[a1][a2]amix=inputs=2:duration=longest"
+      )
+      .output(outputPath)
+      .on("end", async () => {
+        console.log("Audio merged with backsound successfully");
+
+        const mergedAudioBuffer = await fs.readFile(outputPath);
+
+        const mergedAudio = new MergeDB({
+          fileName: "merged-audio-with-backsound.mp3",
+          audioData: mergedAudioBuffer,
+        });
+        await mergedAudio.save();
+
+        await fs.unlink(tempAudio1Path);
+        await fs.unlink(tempAudio2Path);
+        await fs.unlink(outputPath);
+
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.send(mergedAudioBuffer);
+      })
+      .on("error", (error) => {
+        console.error("Error merging audio with backsound:", error);
+        return res.status(500).send("Error merging audio with backsound");
+      })
+      .run();
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).send("Error merging audio with backsound");
   }
 });
 
-router.get("/latest-audio", async (req, res) => {
+router.get("/get-audio", async (req, res) => {
   try {
-    const latestAudio = await AudioDB.findOne().sort({ createdAt: -1 });
+    const latestAudios = await AudioDB.find().sort({ createdAt: -1 });
 
-    if (!latestAudio) {
+    if (latestAudios.length === 0) {
       console.error("Tidak ada audio yang tersedia.");
       return res.status(404).send("Tidak ada audio yang tersedia.");
     }
 
-    res.set("Content-Type", "audio/mpeg");
-    res.send(latestAudio.audioData);
-    console.log("succes", latestAudio.fileName);
+    const audioDataArray = latestAudios.map((audio) => ({
+      id: audio.id,
+      audioData: audio.audioData.toString("base64"),
+    }));
+
+    res.set("Content-Type", "application/json");
+    res.json(audioDataArray);
+    console.log("Success, total latest audio:", latestAudios.length);
   } catch (error) {
     console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
     res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
   }
 });
 
-router.get("/latest-mergewithbacksound", async (req, res) => {
+router.get("/getdual", async (req, res) => {
   try {
-    const latestAudio = await MergeDB.findOne().sort({ createdAt: -1 });
+    const latestAudios = await DualAudioDB.find().sort({ createdAt: -1 });
 
-    if (!latestAudio) {
+    if (latestAudios.length === 0) {
       console.error("Tidak ada audio yang tersedia.");
       return res.status(404).send("Tidak ada audio yang tersedia.");
     }
 
-    res.set("Content-Type", "audio/mpeg");
-    res.send(latestAudio.audioData);
-    console.log("succes", latestAudio.fileName);
+    const audioDataArray = latestAudios.map((audio) => ({
+      id: audio.id,
+      audio1: {
+        fileName: audio.audio1.fileName,
+        audioData: audio.audio1.audioData.toString("base64"),
+      },
+      audio2: {
+        fileName: audio.audio2.fileName,
+        audioData: audio.audio2.audioData.toString("base64"),
+      },
+      createdAt: audio.createdAt,
+      updatedAt: audio.updatedAt,
+      __v: audio.__v,
+    }));
+
+    res.set("Content-Type", "application/json");
+    res.json(audioDataArray);
+    console.log("Success, total latest audio:", latestAudios.length);
   } catch (error) {
     console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
     res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
   }
 });
 
-router.get("/audio/:id", async (req, res) => {
-  try {
-    const audio = await AudioDB.findById(req.params.id);
-    if (!audio) {
-      return res.status(404).json({ error: "Audio not found" });
-    }
+// router.get("/latest-audio", async (req, res) => {
+//   try {
+//     const latestAudio = await AudioDB.findOne().sort({ createdAt: -1 });
 
-    res.set("Content-Type", "audio/mpeg");
-    res.send(audio.audioData);
-  } catch (error) {
-    console.error("Error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+//     if (!latestAudio) {
+//       console.error("Tidak ada audio yang tersedia.");
+//       return res.status(404).send("Tidak ada audio yang tersedia.");
+//     }
 
-router.get("/getmerge", async (req, res) => {
-  try {
-    const mergedAudios = await AudioDB.find();
-    res.json(mergedAudios);
-  } catch (error) {
-    console.error("Error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-router.get("/getmergewithbacksound", async (req, res) => {
-  try {
-    const mergedAudios = await MergeDB.find();
-    res.json(mergedAudios);
-  } catch (error) {
-    console.error("Error:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+//     res.set("Content-Type", "audio/mpeg");
+//     res.send(latestAudio.audioData);
+//     console.log("succes", latestAudio.fileName);
+//   } catch (error) {
+//     console.error("Terjadi kesalahan saat mengambil audio terbaru:", error);
+//     res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
+//   }
+// });
 
 module.exports = router;

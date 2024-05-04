@@ -1,7 +1,7 @@
 const express = require("express");
 const app = express();
 const cors = require("cors");
-// const convertAudio = require("./convertaudio");
+const convertAudio = require("./convertaudio");
 const convertImage = require("./convertimage");
 const mergeAudio = require("./mergeaudio");
 
@@ -18,7 +18,7 @@ app.get("/", async (req, res, next) => {
   });
 });
 
-// app.use("/", convertAudio);
+app.use("/", convertAudio);
 app.use("/images", convertImage);
 app.use("/merge", mergeAudio);
 
