@@ -76,7 +76,7 @@ router.post("/merge", async (req, res) => {
         await fs.unlink(outputPath);
 
         res.setHeader("Content-Type", "audio/mpeg");
-        res.send(mergedAudioBuffer);
+        return res.send(mergedAudioBuffer);
       })
       .on("error", (error) => {
         console.error("Error merging audio:", error);
@@ -131,7 +131,7 @@ router.post("/mergewithbacksound", async (req, res) => {
         await fs.unlink(outputPath);
 
         res.setHeader("Content-Type", "audio/mpeg");
-        res.send(mergedAudioBuffer);
+        return res.send(mergedAudioBuffer);
       })
       .on("error", (error) => {
         console.error("Error merging audio with backsound:", error);
@@ -143,6 +143,8 @@ router.post("/mergewithbacksound", async (req, res) => {
     return res.status(500).send("Error merging audio with backsound");
   }
 });
+
+module.exports = router;
 
 router.get("/getdual", async (req, res) => {
   try {
@@ -184,7 +186,5 @@ router.get("/getdual", async (req, res) => {
     res.status(500).send("Terjadi kesalahan saat mengambil audio terbaru");
   }
 });
-
-
 
 module.exports = router;
