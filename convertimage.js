@@ -34,7 +34,7 @@ router.post("/img/upload", upload.single("image"), async (req, res) => {
     console.log("Data gambar yang akan disimpan:", newImage);
 
     res.json({
-      processedImageUrl: `http://localhost:5000/images/latest-img`,
+      processedImageUrl: `https://beconverter.vercel.app/images/latest-img`,
       imageDetails: {
         processedImageSize: newImage.size,
         processedImageWidth: newImage.width,
@@ -46,8 +46,6 @@ router.post("/img/upload", upload.single("image"), async (req, res) => {
     res.status(500).json({ error: "Image processing failed" });
   }
 });
-
-
 
 router.get("/latest-img", async (req, res) => {
   try {
@@ -67,9 +65,6 @@ router.get("/latest-img", async (req, res) => {
     res.status(500).send("Terjadi kesalahan saat mengunduh gambar");
   }
 });
-
-
-
 
 // router.get("/download/:imageId", async (req, res) => {
 //   try {
