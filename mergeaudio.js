@@ -71,6 +71,10 @@ router.post("/merge", async (req, res) => {
 
         await dualAudio.save();
 
+        await fs.unlink(tempAudio1Path);
+        await fs.unlink(tempAudio2Path);
+        await fs.unlink(outputPath);
+
         res.setHeader("Content-Type", "audio/mpeg");
         return res.send(mergedAudioBuffer);
       })
@@ -121,6 +125,10 @@ router.post("/mergewithbacksound", async (req, res) => {
         });
 
         await dualAudio.save();
+
+        await fs.unlink(tempAudio1Path);
+        await fs.unlink(tempAudio2Path);
+        await fs.unlink(outputPath);
 
         res.setHeader("Content-Type", "audio/mpeg");
         return res.send(mergedAudioBuffer);
