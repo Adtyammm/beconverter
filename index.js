@@ -4,6 +4,7 @@ const cors = require("cors");
 const convertAudio = require("./convertaudio");
 const convertImage = require("./convertimage");
 const mergeAudio = require("./mergeaudio");
+const convertVideo = require("./convertvideo");
 
 const dbConfig = require("./mongoDB");
 
@@ -21,6 +22,7 @@ app.get("/", async (req, res, next) => {
 app.use("/convert", convertAudio);
 app.use("/images", convertImage);
 app.use("/merge", mergeAudio);
+app.use("/videos", convertVideo);
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => console.log("Server is running on port", port));
